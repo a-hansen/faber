@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.comfortanalytics'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.1'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1'
+    implementation 'dev.langchain4j:langchain4j:1.+'
+    implementation 'dev.langchain4j:langchain4j-open-ai:1.+'
+    implementation 'dev.langchain4j:langchain4j-core:1.+'
+    implementation 'dev.langchain4j:langchain4j-google-ai-gemini:1.+'
+    implementation 'dev.langchain4j:langchain4j-anthropic:1.+'
+    implementation 'dev.langchain4j:langchain4j-ollama:1.+'
+}
+
+test {
+    useJUnitPlatform()
+}
