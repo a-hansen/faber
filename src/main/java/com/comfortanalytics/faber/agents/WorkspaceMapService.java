@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -19,40 +20,60 @@ public final class WorkspaceMapService {
 
     private static final Pattern PACKAGE_PATTERN = Pattern.compile("(?m)^package\\s+([\\w.]+)\\s*;");
     private static final Pattern TYPE_PATTERN = Pattern.compile(
-            "public\\s+(?:final\\s+|abstract\\s+|sealed\\s+|non-sealed\\s+)?(class|interface|record|enum)\\s+(\\w+)");
-    private static final Pattern RECORD_PATTERN = Pattern.compile(
-            "public\\s+(?:final\\s+)?record\\s+(\\w+)\\s*\\((.*?)\\)\\s*\\{",
-            Pattern.DOTALL);
+            "public\\s+(?:(?:static|final|abstract|sealed|non-sealed)\\s+)*(class|interface|record|enum)\\s+(\\w+)");
     private static final Pattern PUBLIC_MEMBER_PATTERN = Pattern.compile(
             "public\\s+[^{;=]+?\\([^{;]*\\)\\s*(?:throws\\s+[^{;]+)?(?=[{;])",
             Pattern.DOTALL);
-    private static final List<String> EXCLUDED_DIRECTORY_NAMES = List.of(
-            "build",
-            ".gradle",
-            ".idea",
-            ".git",
-            "out",
-            "target");
+    private static final Path SOURCE_ROOT = Path.of("src", "main", "java");
 
     private final Path rootPath;
+    private final Path sourceRoot;
+    private CachedWorkspaceMap cachedWorkspaceMap;
 
     public WorkspaceMapService(@Nonnull Path rootPath) {
         this.rootPath = Objects.requireNonNull(rootPath, "rootPath").toAbsolutePath().normalize();
+        this.sourceRoot = this.rootPath.resolve(SOURCE_ROOT).normalize();
     }
 
     @Nonnull
-    public String loadWorkspaceMap() {
-        try (Stream<Path> pathStream = Files.walk(rootPath)) {
-            Map<String, List<TypeIndexEntry>> entriesByPackage = new LinkedHashMap<>();
-            pathStream
+    public synchronized String loadWorkspaceMap() {
+        WorkspaceSnapshot snapshot = snapshotWorkspace();
+        if (cachedWorkspaceMap != null && cachedWorkspaceMap.snapshot().equals(snapshot)) {
+            return cachedWorkspaceMap.workspaceMap();
+        }
+        Map<String, List<TypeIndexEntry>> entriesByPackage = new LinkedHashMap<>();
+        for (FileSnapshot fileSnapshot : snapshot.files()) {
+            indexFile(entriesByPackage, fileSnapshot.path());
+        }
+        String workspaceMap = format(entriesByPackage);
+        cachedWorkspaceMap = new CachedWorkspaceMap(snapshot, workspaceMap);
+        return workspaceMap;
+    }
+
+    private WorkspaceSnapshot snapshotWorkspace() {
+        if (!Files.isDirectory(sourceRoot)) {
+            return new WorkspaceSnapshot(List.of());
+        }
+        try (Stream<Path> pathStream = Files.walk(sourceRoot)) {
+            List<FileSnapshot> files = pathStream
                     .filter(Files::isRegularFile)
                     .filter(path -> path.toString().endsWith(".java"))
-                    .filter(path -> !isExcluded(path))
-                    .sorted(Comparator.comparing(Path::toString))
-                    .forEach(path -> indexFile(entriesByPackage, path));
-            return format(entriesByPackage);
+                    .sorted(Comparator.comparing(path -> sourceRoot.relativize(path).toString()))
+                    .map(this::toFileSnapshot)
+                    .toList();
+            return new WorkspaceSnapshot(files);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to scan workspace for Java source files under: " + rootPath, e);
+            throw new IllegalStateException("Failed to scan workspace for Java source files under: " + sourceRoot, e);
+        }
+    }
+
+    private FileSnapshot toFileSnapshot(Path path) {
+        try {
+            Path normalized = path.toAbsolutePath().normalize();
+            FileTime lastModifiedTime = Files.getLastModifiedTime(normalized);
+            return new FileSnapshot(normalized, lastModifiedTime.toMillis(), Files.size(normalized));
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read Java source file metadata: " + path, e);
         }
     }
 
@@ -60,22 +81,63 @@ public final class WorkspaceMapService {
         try {
             String content = Files.readString(path, StandardCharsets.UTF_8);
             String packageName = extractPackageName(content);
-            Matcher typeMatcher = TYPE_PATTERN.matcher(content);
-            if (!typeMatcher.find()) {
+            List<TypeDeclaration> typeDeclarations = extractTypeDeclarations(content);
+            if (typeDeclarations.isEmpty()) {
                 return;
             }
-            String kind = typeMatcher.group(1);
-            String typeName = typeMatcher.group(2);
-            ArrayList<String> signatures = new ArrayList<>();
-            addRecordMembers(content, typeName, signatures);
-            addPublicMembers(content, typeName, signatures);
-            signatures.sort(String::compareTo);
-            entriesByPackage
-                    .computeIfAbsent(packageName, ignored -> new ArrayList<>())
-                    .add(new TypeIndexEntry(typeName, kind, List.copyOf(signatures)));
+            List<TypeIndexEntry> packageEntries = entriesByPackage.computeIfAbsent(
+                    packageName,
+                    ignored -> new ArrayList<>(typeDeclarations.size()));
+            for (TypeDeclaration typeDeclaration : typeDeclarations) {
+                ArrayList<String> signatures = new ArrayList<>();
+                addRecordMembers(typeDeclaration, signatures);
+                addPublicMembers(content, typeDeclaration, signatures);
+                signatures.sort(String::compareTo);
+                packageEntries.add(new TypeIndexEntry(typeDeclaration.displayName(), typeDeclaration.kind(), List.copyOf(signatures)));
+            }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read Java source file: " + path, e);
         }
+    }
+
+    private List<TypeDeclaration> extractTypeDeclarations(String content) {
+        Matcher typeMatcher = TYPE_PATTERN.matcher(content);
+        ArrayList<TypeDeclaration> declarations = new ArrayList<>();
+        while (typeMatcher.find()) {
+            int bodyStart = content.indexOf('{', typeMatcher.end());
+            if (bodyStart < 0) {
+                continue;
+            }
+            int bodyEnd = findMatchingBrace(content, bodyStart);
+            if (bodyEnd < 0) {
+                continue;
+            }
+            declarations.add(new TypeDeclaration(
+                    typeMatcher.group(2),
+                    typeMatcher.group(1),
+                    typeMatcher.start(),
+                    bodyStart,
+                    bodyEnd,
+                    content.substring(typeMatcher.start(), bodyStart)));
+        }
+        if (declarations.isEmpty()) {
+            return List.of();
+        }
+
+        ArrayList<TypeDeclaration> resolved = new ArrayList<>(declarations.size());
+        ArrayList<TypeDeclaration> parentStack = new ArrayList<>();
+        for (TypeDeclaration declaration : declarations) {
+            while (!parentStack.isEmpty() && declaration.startIndex() > parentStack.get(parentStack.size() - 1).bodyEndIndex()) {
+                parentStack.remove(parentStack.size() - 1);
+            }
+            String displayName = parentStack.isEmpty()
+                    ? declaration.typeName()
+                    : parentStack.get(parentStack.size() - 1).displayName() + "." + declaration.typeName();
+            TypeDeclaration resolvedDeclaration = declaration.withDisplayName(displayName);
+            resolved.add(resolvedDeclaration);
+            parentStack.add(resolvedDeclaration);
+        }
+        return resolved;
     }
 
     private String extractPackageName(String content) {
@@ -83,15 +145,15 @@ public final class WorkspaceMapService {
         return packageMatcher.find() ? packageMatcher.group(1) : "<default>";
     }
 
-    private void addRecordMembers(String content, String typeName, List<String> signatures) {
-        Matcher recordMatcher = RECORD_PATTERN.matcher(content);
-        if (!recordMatcher.find() || !typeName.equals(recordMatcher.group(1))) {
+    private void addRecordMembers(TypeDeclaration typeDeclaration, List<String> signatures) {
+        if (!"record".equals(typeDeclaration.kind())) {
             return;
         }
-        String componentBlock = recordMatcher.group(2).replaceAll("\\s+", " ").trim();
-        if (!componentBlock.isEmpty()) {
-            signatures.add("public " + typeName + "(" + componentBlock + ")");
+        String componentBlock = extractRecordComponentBlock(typeDeclaration.header());
+        if (componentBlock.isBlank()) {
+            return;
         }
+        signatures.add("public " + typeDeclaration.typeName() + "(" + componentBlock + ")");
         for (String component : splitRecordComponents(componentBlock)) {
             String normalizedComponent = stripAnnotations(component).trim();
             Matcher componentMatcher = Pattern.compile("(.+?)\\s+(\\w+)$").matcher(normalizedComponent);
@@ -101,18 +163,18 @@ public final class WorkspaceMapService {
         }
     }
 
-    private void addPublicMembers(String content, String typeName, List<String> signatures) {
-        Matcher memberMatcher = PUBLIC_MEMBER_PATTERN.matcher(content);
+    private void addPublicMembers(String content, TypeDeclaration typeDeclaration, List<String> signatures) {
+        String typeBody = content.substring(typeDeclaration.bodyStartIndex() + 1, typeDeclaration.bodyEndIndex());
+        Matcher memberMatcher = PUBLIC_MEMBER_PATTERN.matcher(typeBody);
         while (memberMatcher.find()) {
+            if (braceDepthAt(typeBody, memberMatcher.start()) != 0) {
+                continue;
+            }
             String signature = normalizeSignature(memberMatcher.group());
             if (signature.startsWith("public class")
                     || signature.startsWith("public interface")
                     || signature.startsWith("public record")
                     || signature.startsWith("public enum")) {
-                continue;
-            }
-            if (signature.equals("public " + typeName + "()")) {
-                signatures.add(signature);
                 continue;
             }
             if (!signatures.contains(signature)) {
@@ -121,45 +183,82 @@ public final class WorkspaceMapService {
         }
     }
 
-    private boolean isExcluded(Path path) {
-        Path normalized = path.toAbsolutePath().normalize();
-        for (Path part : rootPath.relativize(normalized)) {
-            if (EXCLUDED_DIRECTORY_NAMES.contains(part.toString())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private String format(Map<String, List<TypeIndexEntry>> entriesByPackage) {
         if (entriesByPackage.isEmpty()) {
             return "No Java source types found in workspace.";
         }
-        StringBuilder builder = new StringBuilder(entriesByPackage.size() * 128);
+        StringBuilder builder = new StringBuilder(entriesByPackage.size() * 96);
         entriesByPackage.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .forEach(entry -> {
-                    builder.append("Package ")
+                    builder.append("pkg ")
                             .append(entry.getKey())
                             .append(System.lineSeparator());
                     entry.getValue().stream()
                             .sorted(Comparator.comparing(TypeIndexEntry::typeName))
                             .forEach(typeEntry -> {
-                                builder.append("  - ")
+                                builder.append("- ")
                                         .append(typeEntry.typeName())
-                                        .append(" (")
+                                        .append("[")
                                         .append(typeEntry.kind())
-                                        .append(")")
-                                        .append(System.lineSeparator());
-                                for (String signature : typeEntry.signatures()) {
-                                    builder.append("    • ")
-                                            .append(signature)
-                                            .append(System.lineSeparator());
+                                        .append("]");
+                                if (!typeEntry.signatures().isEmpty()) {
+                                    builder.append(": ")
+                                            .append(String.join("; ", typeEntry.signatures()));
                                 }
+                                builder.append(System.lineSeparator());
                             });
-                    builder.append(System.lineSeparator());
                 });
         return builder.toString().stripTrailing();
+    }
+
+    private static String extractRecordComponentBlock(String recordHeader) {
+        int componentStart = recordHeader.indexOf('(');
+        if (componentStart < 0) {
+            return "";
+        }
+        int depth = 0;
+        for (int index = componentStart; index < recordHeader.length(); index++) {
+            char current = recordHeader.charAt(index);
+            if (current == '(') {
+                depth++;
+            } else if (current == ')') {
+                depth--;
+                if (depth == 0) {
+                    return recordHeader.substring(componentStart + 1, index).replaceAll("\\s+", " ").trim();
+                }
+            }
+        }
+        return "";
+    }
+
+    private static int findMatchingBrace(String content, int openingBraceIndex) {
+        int depth = 0;
+        for (int index = openingBraceIndex; index < content.length(); index++) {
+            char current = content.charAt(index);
+            if (current == '{') {
+                depth++;
+            } else if (current == '}') {
+                depth--;
+                if (depth == 0) {
+                    return index;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static int braceDepthAt(String content, int limitExclusive) {
+        int depth = 0;
+        for (int index = 0; index < limitExclusive; index++) {
+            char current = content.charAt(index);
+            if (current == '{') {
+                depth++;
+            } else if (current == '}') {
+                depth = Math.max(0, depth - 1);
+            }
+        }
+        return depth;
     }
 
     private static String normalizeSignature(String rawSignature) {
@@ -190,6 +289,33 @@ public final class WorkspaceMapService {
         }
         components.add(componentBlock.substring(start).trim());
         return components;
+    }
+
+    private record CachedWorkspaceMap(WorkspaceSnapshot snapshot, String workspaceMap) {
+    }
+
+    private record WorkspaceSnapshot(List<FileSnapshot> files) {
+    }
+
+    private record FileSnapshot(Path path, long lastModifiedMillis, long size) {
+    }
+
+    private record TypeDeclaration(
+            String typeName,
+            String kind,
+            int startIndex,
+            int bodyStartIndex,
+            int bodyEndIndex,
+            String header,
+            String displayName) {
+
+        private TypeDeclaration(String typeName, String kind, int startIndex, int bodyStartIndex, int bodyEndIndex, String header) {
+            this(typeName, kind, startIndex, bodyStartIndex, bodyEndIndex, header, typeName);
+        }
+
+        private TypeDeclaration withDisplayName(String value) {
+            return new TypeDeclaration(typeName, kind, startIndex, bodyStartIndex, bodyEndIndex, header, value);
+        }
     }
 
     private record TypeIndexEntry(String typeName, String kind, List<String> signatures) {

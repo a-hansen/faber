@@ -16,6 +16,7 @@ dependencies {
 
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.1'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.1'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.21.1'
     implementation 'dev.langchain4j:langchain4j:1.+'
     implementation 'dev.langchain4j:langchain4j-open-ai:1.+'
     implementation 'dev.langchain4j:langchain4j-core:1.+'
@@ -26,4 +27,30 @@ dependencies {
 
 test {
     useJUnitPlatform()
+
+    testLogging {
+        // Forces Gradle to print stdout and stderr to the console
+        events "passed", "skipped", "failed", "standardOut", "standardError"
+
+        // Shows the full stack trace in the console on a failure
+        exceptionFormat "full"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+    }
+}
+
+jar {
+    archiveClassifier = ''
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn configurations.runtimeClasspath
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }
+                .collect { zipTree(it) }
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    manifest {
+        attributes 'Main-Class': 'com.comfortanalytics.faber.cli.FaberCli'
+    }
 }

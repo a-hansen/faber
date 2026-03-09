@@ -1,11 +1,5 @@
 # CODE_MAP
 
-## Package `com.comfortanalytics.faber`
-
-### `Faber`
-Demo entry point that builds a minimal request and routes it through the orchestrator.
-- `public static void main(String[] args)`
-
 ## Package `com.comfortanalytics.faber.annotation`
 
 ### `Nonnull`
@@ -39,16 +33,9 @@ Specialized agent that condenses prior memory messages into a summary message.
 - `public ContextCondenserAgent(Path workspaceRoot, AgentExecutionEngine executionEngine)`
 - `public MemoryMessage condense(List<MemoryMessage> messages) throws TimeoutException`
 
-### `FinancialAnalystAgent`
-Specialized agent for finance-oriented requests using the shared agent execution flow.
-- `public FinancialAnalystAgent(ModelProviderManager modelProviderManager)`
-- `public FinancialAnalystAgent(Path workspaceRoot, AgentExecutionEngine executionEngine)`
-
-### `JavaDeveloperAgent`
-Specialized agent for Java development requests that can receive tools and inject both `CODE_MAP.md` and a runtime workspace map into its system message.
-- `public JavaDeveloperAgent(ModelProviderManager modelProviderManager)`
-- `public JavaDeveloperAgent(Path workspaceRoot, AgentExecutionEngine executionEngine, List<Object> tools)`
-- `public JavaDeveloperAgent(Path workspaceRoot, AgentExecutionEngine executionEngine, List<Object> tools, WorkspaceMapService workspaceMapService)`
+### `DynamicAgent`
+Generic agent wrapper that executes a routing-selected persona with dynamically resolved tools and injected context.
+- `public DynamicAgent(AgentRole role, ModelTier modelTier, String persona, AgentExecutionEngine executionEngine, List<Object> tools, String injectedContext)`
 
 ### `LangChain4jAgentExecutionEngine`
 LangChain4j-backed execution engine that resolves a chat model by tier and applies system-message and tool injection per invocation.
@@ -61,9 +48,51 @@ Utility that reads `CODE_MAP.md` from the workspace root on demand for system-me
 - `public String loadCodeMap()`
 
 ### `WorkspaceMapService`
-Runtime indexing service that scans Java sources under the workspace root and returns a lightweight package/type/public-method map.
+Runtime indexing service that scans `src/main/java`, caches a compact package/type/public-method map, and includes nested public types for prompt enrichment.
 - `public WorkspaceMapService(Path rootPath)`
 - `public String loadWorkspaceMap()`
+
+## Package `com.comfortanalytics.faber.cli`
+
+### `ConfigLoader`
+YAML-backed loader that reads a `faber.yml` file into the immutable CLI configuration model.
+- `public ConfigLoader()`
+- `public FaberConfig load(Path configPath)`
+
+### `FaberCli`
+CLI/bootstrap entry point that parses `--config` and `--task`, wires models/tools/contexts, attaches audit listeners, and executes the orchestrator.
+- `public static void main(String[] args)`
+
+## Package `com.comfortanalytics.faber.cli.config`
+
+### `FaberConfig`
+Top-level immutable CLI configuration record that groups workspace, routing, and model-tier settings.
+- `public FaberConfig(WorkspaceConfig workspace, RoutingConfig routing, ModelsConfig models)`
+- `public WorkspaceConfig workspace()`
+- `public RoutingConfig routing()`
+- `public ModelsConfig models()`
+
+### `WorkspaceConfig`
+Immutable workspace configuration record that defines the sandbox root path used by tools and context loaders.
+- `public WorkspaceConfig(String rootPath)`
+- `public String rootPath()`
+
+### `RoutingConfig`
+Immutable routing configuration record that captures the configured routing mode for the CLI runtime.
+- `public RoutingConfig(String mode)`
+- `public String mode()`
+
+### `ModelsConfig`
+Immutable model configuration record that maps tier aliases to provider/model definitions for tier 1 and tier 2 runtime selection.
+- `public ModelsConfig(Map<String, ProviderConfig> tier1, Map<String, ProviderConfig> tier2)`
+- `public Map<String, ProviderConfig> tier1()`
+- `public Map<String, ProviderConfig> tier2()`
+
+### `ProviderConfig`
+Immutable provider configuration record that defines the provider kind and concrete model name for one configured entry.
+- `public ProviderConfig(String provider, String model)`
+- `public String provider()`
+- `public String model()`
 
 ## Package `com.comfortanalytics.faber.audit`
 
@@ -151,13 +180,13 @@ Runtime exception used to mark retryable provider rate-limit failures.
 ## Package `com.comfortanalytics.faber.orchestrator`
 
 ### `AgentFactory`
-Factory interface for instantiating the agent that should handle a routed request.
-- `public BaseAgent create(AgentRole role)`
+Factory interface for instantiating a routed agent from the full typed routing decision.
+- `public BaseAgent create(RoutingDecision decision)`
 
 ### `DefaultAgentFactory`
-Default factory that creates concrete agents and injects developer tools, curated code-map context, and runtime workspace indexing.
-- `public DefaultAgentFactory(Path workspaceRoot, AgentExecutionEngine executionEngine, SandboxedFileService sandboxedFileService, GradleExecutionService gradleExecutionService)`
-- `public BaseAgent create(AgentRole role)`
+Registry-backed factory that resolves required tools and context loaders before composing a `DynamicAgent`.
+- `public DefaultAgentFactory(AgentExecutionEngine executionEngine, Map<String, Object> toolRegistry, Map<String, Supplier<String>> contextRegistry)`
+- `public BaseAgent create(RoutingDecision decision)`
 
 ### `OrchestratorAgent`
 Orchestrator that can either route a request or execute the selected agent through the full lifecycle pipeline.
@@ -181,21 +210,24 @@ Enum representing the agent roles available to the routing layer.
 - Public methods: none
 
 ### `DynamicRoutingStrategy`
-Routing strategy that uses a typed routing decision client and falls back to rule-based routing when needed.
+Routing strategy that uses a typed routing decision client and falls back to default decision metadata when needed.
 - `public DynamicRoutingStrategy(RoutingDecisionClient routingDecisionClient)`
 - `public AgentRole route(TaskRequest request)`
 - `public RoutingDecision routeDecision(TaskRequest request)`
 
 ### `LangChain4jRoutingDecisionClient`
-Structured-output routing client that uses LangChain4j AI Services to return a typed `RoutingDecision`.
+Structured-output routing client that uses LangChain4j AI Services to return a typed `RoutingDecision` with persona, tool IDs, and context IDs.
 - `public LangChain4jRoutingDecisionClient(ChatModel chatModel)`
 - `public RoutingDecision routeDecision(TaskRequest request)`
 
 ### `RoutingDecision`
-Immutable routing result that captures the selected agent role and model tier.
-- `public RoutingDecision(AgentRole role, ModelTier modelTier)`
+Immutable routing result that captures the selected agent role, model tier, persona, and required tool/context identifiers.
+- `public RoutingDecision(AgentRole role, ModelTier modelTier, String persona, List<String> requiredTools, List<String> requiredContexts)`
 - `public AgentRole role()`
 - `public ModelTier modelTier()`
+- `public String persona()`
+- `public List<String> requiredTools()`
+- `public List<String> requiredContexts()`
 
 ### `RoutingDecisionClient`
 Interface for components that classify a task request into a typed routing decision.

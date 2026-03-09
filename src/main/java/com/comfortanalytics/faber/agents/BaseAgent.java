@@ -73,6 +73,11 @@ public abstract class BaseAgent {
     }
 
     @Nonnull
+    protected String injectedContext() {
+        return "";
+    }
+
+    @Nonnull
     protected String buildUserMessage(@Nonnull TaskRequest request) {
         return Objects.requireNonNull(request, "request").userInput();
     }
@@ -104,6 +109,16 @@ public abstract class BaseAgent {
                     .append("Current workspace map:")
                     .append(System.lineSeparator())
                     .append(workspaceMapService.loadWorkspaceMap());
+        }
+
+        // Append factory-selected context sections for dynamically composed agents.
+        String extraContext = injectedContext();
+        if (!extraContext.isBlank()) {
+            builder.append(System.lineSeparator())
+                    .append(System.lineSeparator())
+                    .append("Injected context:")
+                    .append(System.lineSeparator())
+                    .append(extraContext);
         }
         return builder.toString();
     }

@@ -7,12 +7,19 @@ import com.comfortanalytics.faber.routing.AgentRole;
 import com.comfortanalytics.faber.routing.DynamicRoutingStrategy;
 import com.comfortanalytics.faber.routing.RoutingDecision;
 import com.comfortanalytics.faber.routing.RoutingStrategy;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeoutException;
 
 public final class OrchestratorAgent {
 
     private static final ModelTier DEFAULT_MODEL_TIER = ModelTier.TIER2_BALANCED;
+    private static final String JAVA_DEVELOPER_PERSONA =
+            "You are a Java developer agent. Focus on correctness, maintainable Java code, and practical implementation details.";
+    private static final String FINANCIAL_ANALYST_PERSONA =
+            "You are a financial analyst agent. Focus on risk, market context, and clear financial reasoning.";
+    private static final String CONTEXT_CONDENSER_PERSONA =
+            "You are a context condenser agent. Produce a concise memory summary that preserves key facts, decisions, and open questions.";
 
     private final RoutingStrategy routingStrategy;
     private final AgentFactory agentFactory;
@@ -41,7 +48,7 @@ public final class OrchestratorAgent {
 
         // Select a typed routing decision, then instantiate and execute the target agent.
         RoutingDecision decision = selectDecision(nonNullRequest);
-        BaseAgent agent = agentFactory.create(decision.role());
+        BaseAgent agent = agentFactory.create(decision);
         return agent.handle(nonNullRequest, decision.modelTier());
     }
 
@@ -50,6 +57,31 @@ public final class OrchestratorAgent {
         if (routingStrategy instanceof DynamicRoutingStrategy dynamicRoutingStrategy) {
             return dynamicRoutingStrategy.routeDecision(request);
         }
-        return new RoutingDecision(routingStrategy.route(request), DEFAULT_MODEL_TIER);
+        return defaultDecision(routingStrategy.route(request));
+    }
+
+    @Nonnull
+    private RoutingDecision defaultDecision(@Nonnull AgentRole role) {
+        AgentRole nonNullRole = Objects.requireNonNull(role, "role");
+        return switch (nonNullRole) {
+            case JAVA_DEVELOPER -> new RoutingDecision(
+                    AgentRole.JAVA_DEVELOPER,
+                    DEFAULT_MODEL_TIER,
+                    JAVA_DEVELOPER_PERSONA,
+                    List.of("file_system", "gradle"),
+                    List.of("code_map", "workspace_index"));
+            case FINANCIAL_ANALYST -> new RoutingDecision(
+                    AgentRole.FINANCIAL_ANALYST,
+                    DEFAULT_MODEL_TIER,
+                    FINANCIAL_ANALYST_PERSONA,
+                    List.of(),
+                    List.of());
+            case CONTEXT_CONDENSER -> new RoutingDecision(
+                    AgentRole.CONTEXT_CONDENSER,
+                    DEFAULT_MODEL_TIER,
+                    CONTEXT_CONDENSER_PERSONA,
+                    List.of(),
+                    List.of());
+        };
     }
 }
