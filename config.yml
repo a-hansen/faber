@@ -1,0 +1,23 @@
+workspace:
+  rootPath: .
+
+routing:
+  mode: DYNAMIC
+
+models:
+  tier1:
+    router:
+      provider: gemini
+      model: gemini-2.1-flash-lite-preview
+      apiKey: API-KEY
+  tier2:
+    executor:
+      provider: gemini
+      model: gemini-3-flash-preview
+      apiKey: API-KEY
+  tier3:
+    architect:
+      provider: gemini
+      model: gemini-3.1-pro-preview
+      apiKey: API-KEY
+

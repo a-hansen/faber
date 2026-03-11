@@ -19,11 +19,12 @@ The current checkout now supports the documented CLI/bootstrap contract:
 - `com.comfortanalytics.faber.cli.FaberCli` contains the CLI/bootstrap implementation
 - `config.yml` and `task.txt` are used by default when `--config` and `--task` are omitted
 - `--config <path>` and `--task <path>` can still override those defaults
+- model config supports `tier1`, `tier2`, and optional `tier3` sections
+- provider API keys can be supplied inline with `apiKey` or through environment variables
 - the CLI builds an `OrchestratorAgent` and executes `OrchestratorAgent.execute(TaskRequest)`
 
 Important current limitations:
-- provider API keys are still read from `System.getenv()` rather than from a built-in `.env` loader
-- the current model configuration shape covers `tier1` and `tier2`; `tier3` falls back to the configured tier-2 execution models
+- provider API keys can still fall back to environment variables when `apiKey` is omitted from `config.yml`; there is not yet a built-in `.env` loader
 
 ## 3. Configuration (`config.yml`)
 
@@ -32,14 +33,15 @@ Important current limitations:
 The Faber runtime is configured through a YAML file such as `config.yml`. The current CLI reads:
 - the sandbox workspace root
 - the routing mode
-- the tier-1 and tier-2 provider/model mappings
+- the tier-1, tier-2, and optional tier-3 provider/model mappings
+- an optional per-provider `apiKey`
 - by default, `config.yml` from the current working directory unless `--config` is provided
 
 Example `config.yml`:
 
 ```yaml
 workspace:
-  rootPath: C:/work/my-repo
+  rootPath: .
 
 routing:
   mode: DYNAMIC
@@ -48,11 +50,18 @@ models:
   tier1:
     router:
       provider: gemini
-      model: gemini-2.0-flash
+      model: gemini-2.1-flash-lite-preview
+      apiKey: API-KEY
   tier2:
     executor:
-      provider: openai
-      model: gpt-4.1-mini
+      provider: gemini
+      model: gemini-3-flash-preview
+      apiKey: API-KEY
+  tier3:
+    architect:
+      provider: gemini
+      model: gemini-3.1-pro-preview
+      apiKey: API-KEY
 ```
 
 Supported provider kinds in the current CLI bootstrap are:
@@ -67,7 +76,7 @@ This part is now implemented in the repository:
 - `ConfigLoader` parses `config.yml` (or the file passed through `--config`) into immutable config records under `com.comfortanalytics.faber.cli.config`
 - `FaberCli` reads `task.txt` by default, or the file passed through `--task`
 - relative `workspace.rootPath` values are resolved relative to the directory containing `config.yml`
-- provider API keys are resolved from environment variables such as:
+- provider API keys can be supplied inline with `apiKey` or through environment variables such as:
   - `OPENAI_API_KEY`
   - `GEMINI_API_KEY`
   - `ANTHROPIC_API_KEY`
@@ -154,7 +163,7 @@ With the checked-in jar name in this repository, that is typically:
 When that command runs, the system:
 1. starts the Faber runtime
 2. parses `config.yml`
-3. resolves provider credentials from environment variables
+3. resolves provider credentials from inline `apiKey` values or environment variables
 4. reads the task file
 5. creates a `TaskRequest`
 6. builds the tool and context registries
@@ -212,9 +221,9 @@ These files matter to the implemented CLI/runtime.
 ## Recommended usage today
 
 If you are working with the repository exactly as checked in right now:
-- place `config.yml` and `task.txt` in the working directory when you want zero-argument CLI execution
+- start with the checked-in root `config.yml` and `task.txt` when you want zero-argument CLI execution
 - use `--config` and `--task` only when you need to override those defaults
-- keep provider API keys in environment variables, not in `config.yml`
+- keep provider API keys in `config.yml` or environment variables, depending on your local workflow
 - keep `CODE_MAP.md` present when you want developer-focused context injection
 - keep your target source under `src/main/java` when you want workspace indexing
 - use the programmatic Java wiring path only when you need custom bootstrap behavior beyond the shipped CLI
@@ -223,6 +232,7 @@ If you are working with the repository exactly as checked in right now:
 
 - Project Faber now includes a top-level executable entry point in `Main` and a CLI/bootstrap implementation in `FaberCli`.
 - `config.yml` and `task.txt` are the default CLI inputs, with `--config` and `--task` available as overrides.
+- `config.yml` supports `tier1`, `tier2`, optional `tier3`, and optional inline `apiKey` values.
 - The built jar is executable through `java -jar`.
 - Dynamic routing, dynamic agent composition, sandboxed tools, memory, audit seams, and workspace indexing are all present.
 - The main remaining gaps are polish items such as a built-in `.env` loader and configurable audit/bootstrap options.

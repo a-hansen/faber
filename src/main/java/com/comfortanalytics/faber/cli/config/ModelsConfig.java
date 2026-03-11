@@ -8,11 +8,13 @@ import java.util.Objects;
 
 public record ModelsConfig(
         @Nonnull Map<String, ProviderConfig> tier1,
-        @Nonnull Map<String, ProviderConfig> tier2) {
+        @Nonnull Map<String, ProviderConfig> tier2,
+        @Nonnull Map<String, ProviderConfig> tier3) {
 
     public ModelsConfig {
         tier1 = copyProviders(Objects.requireNonNullElseGet(tier1, Map::of));
         tier2 = copyProviders(Objects.requireNonNullElseGet(tier2, Map::of));
+        tier3 = copyProviders(Objects.requireNonNullElseGet(tier3, Map::of));
     }
 
     @Nonnull
@@ -28,4 +30,3 @@ public record ModelsConfig(
         return Collections.unmodifiableMap(copy);
     }
 }
-

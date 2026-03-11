@@ -21,6 +21,7 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -169,6 +170,31 @@ class FaberCliTest {
         assertEquals("", stderr.toString());
     }
     @Test
+    void bootstrapsTier3ModelsAndInlineApiKeys() {
+        FaberConfig config = new FaberConfig(
+                new WorkspaceConfig("."),
+                new RoutingConfig("RULE_BASED"),
+                new ModelsConfig(
+                        Map.of("router", new ProviderConfig("gemini", "gemini-2.1-flash-lite-preview", "API-KEY")),
+                        Map.of("executor", new ProviderConfig("gemini", "gemini-3-flash-preview", "API-KEY")),
+                        Map.of("architect", new ProviderConfig("gemini", "gemini-3.1-pro-preview", "API-KEY"))));
+        LinkedHashMap<String, String> apiKeysByProviderId = new LinkedHashMap<>();
+        FaberCli.bootstrapRuntime(
+                config,
+                Map.of(),
+                tempDir,
+                (providerId, providerConfig, environment, listeners) -> {
+                    apiKeysByProviderId.put(providerId, providerConfig.apiKey());
+                    return new StaticChatModel(providerId, listeners);
+                });
+        assertEquals(
+                Map.of(
+                        "tier1.router", "API-KEY",
+                        "tier2.executor", "API-KEY",
+                        "tier3.architect", "API-KEY"),
+                apiKeysByProviderId);
+    }
+    @Test
     void bootstrapsTheRealRuleBasedRuntimeWithFakeChatModels() throws Exception {
         Files.writeString(tempDir.resolve("AI_CODE_MAP.md"), "# AI_CODE_MAP\n\n### DynamicAgent\n- signature");
         Path srcDir = tempDir.resolve("src/main/java/com/example");
@@ -185,8 +211,9 @@ class FaberCliTest {
                 new WorkspaceConfig("."),
                 new RoutingConfig("RULE_BASED"),
                 new ModelsConfig(
-                        Map.of("router", new ProviderConfig("gemini", "gemini-2.0-flash")),
-                        Map.of("executor", new ProviderConfig("openai", "gpt-4.1-mini"))));
+                        Map.of("router", new ProviderConfig("gemini", "gemini-2.0-flash", null)),
+                        Map.of("executor", new ProviderConfig("openai", "gpt-4.1-mini", null)),
+                        Map.of()));
         OrchestratorAgent orchestrator = FaberCli.bootstrapRuntime(
                 config,
                 Map.of(),

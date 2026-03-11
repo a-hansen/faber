@@ -217,6 +217,14 @@ public final class FaberCli {
                 nonNullWorkspaceRoot,
                 chatModelFactory,
                 false);
+        List<ConfiguredChatModel> rawTier3Models = buildTierModels(
+                ModelTier.TIER3_POWERFUL,
+                "tier3",
+                nonNullModelsConfig.tier3(),
+                environment,
+                nonNullWorkspaceRoot,
+                chatModelFactory,
+                false);
         if (ROUTING_DYNAMIC.equals(routingMode) && rawTier1Models.isEmpty()) {
             throw new IllegalArgumentException("Dynamic routing requires at least one models.tier1 provider");
         }
@@ -224,7 +232,7 @@ public final class FaberCli {
         LinkedHashMap<ModelTier, List<ConfiguredChatModel>> configuredModels = new LinkedHashMap<>(3);
         configuredModels.put(ModelTier.TIER1_FAST, rawTier1Models.isEmpty() ? tier2Models : rawTier1Models);
         configuredModels.put(ModelTier.TIER2_BALANCED, tier2Models);
-        configuredModels.put(ModelTier.TIER3_POWERFUL, tier2Models);
+        configuredModels.put(ModelTier.TIER3_POWERFUL, rawTier3Models.isEmpty() ? tier2Models : rawTier3Models);
         return Map.copyOf(configuredModels);
     }
 
@@ -434,7 +442,7 @@ public final class FaberCli {
             @Nonnull Map<String, String> environment,
             @Nonnull List<ChatModelListener> listeners) {
         OpenAiChatModel.OpenAiChatModelBuilder builder = OpenAiChatModel.builder()
-                .apiKey(requireEnvironmentVariable(environment, "OPENAI_API_KEY", providerId))
+                .apiKey(requireCredential(environment, providerConfig.apiKey(), "OPENAI_API_KEY", providerId))
                 .modelName(providerConfig.model())
                 .listeners(Objects.requireNonNull(listeners, "listeners"));
         String baseUrl = optionalEnvironmentVariable(environment, "OPENAI_BASE_URL");
@@ -451,7 +459,7 @@ public final class FaberCli {
             @Nonnull Map<String, String> environment,
             @Nonnull List<ChatModelListener> listeners) {
         GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder builder = GoogleAiGeminiChatModel.builder()
-                .apiKey(requireEnvironmentVariable(environment, "GEMINI_API_KEY", providerId))
+                .apiKey(requireCredential(environment, providerConfig.apiKey(), "GEMINI_API_KEY", providerId))
                 .modelName(providerConfig.model())
                 .listeners(Objects.requireNonNull(listeners, "listeners"));
         String baseUrl = optionalEnvironmentVariable(environment, "GEMINI_BASE_URL");
@@ -468,7 +476,7 @@ public final class FaberCli {
             @Nonnull Map<String, String> environment,
             @Nonnull List<ChatModelListener> listeners) {
         AnthropicChatModel.AnthropicChatModelBuilder builder = AnthropicChatModel.builder()
-                .apiKey(requireEnvironmentVariable(environment, "ANTHROPIC_API_KEY", providerId))
+                .apiKey(requireCredential(environment, providerConfig.apiKey(), "ANTHROPIC_API_KEY", providerId))
                 .modelName(providerConfig.model())
                 .listeners(Objects.requireNonNull(listeners, "listeners"));
         String baseUrl = optionalEnvironmentVariable(environment, "ANTHROPIC_BASE_URL");
@@ -502,20 +510,29 @@ public final class FaberCli {
     }
 
     @Nonnull
-    private static String requireEnvironmentVariable(
+    private static String requireCredential(
             @Nonnull Map<String, String> environment,
+            String configuredValue,
             @Nonnull String variableName,
             @Nonnull String providerId) {
-        String value = optionalEnvironmentVariable(environment, variableName);
-        if (value == null) {
-            throw new IllegalArgumentException(
-                    "Missing environment variable " + variableName + " for provider " + providerId);
+        String normalizedConfiguredValue = normalizeOptionalValue(configuredValue);
+        if (normalizedConfiguredValue != null) {
+            return normalizedConfiguredValue;
         }
-        return value;
+        String environmentValue = optionalEnvironmentVariable(environment, variableName);
+        if (environmentValue == null) {
+            throw new IllegalArgumentException(
+                    "Missing configured apiKey or environment variable " + variableName + " for provider " + providerId);
+        }
+        return environmentValue;
     }
 
     private static String optionalEnvironmentVariable(@Nonnull Map<String, String> environment, @Nonnull String variableName) {
         String value = Objects.requireNonNull(environment, "environment").get(Objects.requireNonNull(variableName, "variableName"));
+        return normalizeOptionalValue(value);
+    }
+
+    private static String normalizeOptionalValue(String value) {
         if (value == null) {
             return null;
         }

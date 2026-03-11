@@ -61,7 +61,7 @@ Runtime indexing service that scans `src/main/java`, caches a compact package/ty
 ## Package `com.comfortanalytics.faber.cli`
 
 ### `ConfigLoader`
-YAML-backed loader that reads a `faber.yml` file into the immutable CLI configuration model.
+YAML-backed loader that reads a `config.yml` file into the immutable CLI configuration model.
 - `public ConfigLoader()`
 - `public FaberConfig load(Path configPath)`
 
@@ -89,16 +89,18 @@ Immutable routing configuration record that captures the configured routing mode
 - `public String mode()`
 
 ### `ModelsConfig`
-Immutable model configuration record that maps tier aliases to provider/model definitions for tier 1 and tier 2 runtime selection.
-- `public ModelsConfig(Map<String, ProviderConfig> tier1, Map<String, ProviderConfig> tier2)`
+Immutable model configuration record that maps tier aliases to provider/model definitions for tier 1, tier 2, and optional tier 3 runtime selection.
+- `public ModelsConfig(Map<String, ProviderConfig> tier1, Map<String, ProviderConfig> tier2, Map<String, ProviderConfig> tier3)`
 - `public Map<String, ProviderConfig> tier1()`
 - `public Map<String, ProviderConfig> tier2()`
+- `public Map<String, ProviderConfig> tier3()`
 
 ### `ProviderConfig`
-Immutable provider configuration record that defines the provider kind and concrete model name for one configured entry.
-- `public ProviderConfig(String provider, String model)`
+Immutable provider configuration record that defines the provider kind, concrete model name, and optional inline API key for one configured entry.
+- `public ProviderConfig(String provider, String model, String apiKey)`
 - `public String provider()`
 - `public String model()`
+- `public String apiKey()`
 
 ## Package `com.comfortanalytics.faber.audit`
 

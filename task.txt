@@ -1,0 +1,22 @@
+Create a small Java desktop application in this Gradle project that builds into an executable jar.
+
+Requirements:
+- Use Java.
+- Use Gradle for the build.
+- When the jar is launched by double-clicking it, it should open a small window.
+- The window should display the text "Hello World".
+- The window should include an "OK" button.
+- Clicking the "OK" button should close the window and exit the application.
+
+Implementation guidance:
+- Keep the solution simple and self-contained.
+- Prefer standard Java libraries such as Swing unless there is a strong reason not to.
+- Update any required Gradle or manifest configuration so the built jar is directly executable.
+- Add or update tests where practical.
+- Update `README.md` and `AI_CODE_MAP.md` if you add new public classes or public methods.
+
+Deliverables:
+- Source code changes in the current project.
+- A working executable jar produced by Gradle.
+- A short summary of what was added and how to run or build it.
+
