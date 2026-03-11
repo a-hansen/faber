@@ -15,7 +15,7 @@ public final class LangChain4jRoutingDecisionClient implements RoutingDecisionCl
             - modelTier: one of TIER1_FAST, TIER2_BALANCED, TIER3_POWERFUL
             - persona: concise system instructions for the selected agent
             - requiredTools: zero or more tool identifiers from ["file_system", "gradle"]
-            - requiredContexts: zero or more context identifiers from ["code_map", "workspace_index"]
+            - requiredContexts: zero or more context identifiers from ["ai_code_map", "workspace_index"]
 
             Choose the role that best matches the user's intent.
             Choose the model tier based on task complexity:
@@ -24,7 +24,7 @@ public final class LangChain4jRoutingDecisionClient implements RoutingDecisionCl
             - TIER3_POWERFUL for complex, ambiguous, or high-reasoning tasks
 
             Default routing guidance:
-            - JAVA_DEVELOPER usually needs requiredTools ["file_system", "gradle"] and requiredContexts ["code_map", "workspace_index"]
+            - JAVA_DEVELOPER usually needs requiredTools ["file_system", "gradle"] and requiredContexts ["ai_code_map", "workspace_index"]
             - FINANCIAL_ANALYST usually needs no tools or extra contexts
             - CONTEXT_CONDENSER usually needs no tools or extra contexts
 

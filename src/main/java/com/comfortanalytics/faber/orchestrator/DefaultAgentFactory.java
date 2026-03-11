@@ -80,7 +80,7 @@ public final class DefaultAgentFactory implements AgentFactory {
     @Nonnull
     private String contextHeading(@Nonnull String contextId) {
         return switch (Objects.requireNonNull(contextId, "contextId")) {
-            case "code_map" -> "Current codebase architecture:";
+            case "ai_code_map" -> "Current codebase architecture:";
             case "workspace_index" -> "Current workspace map:";
             default -> "Context " + contextId + ':';
         };

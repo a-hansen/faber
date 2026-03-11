@@ -28,7 +28,7 @@ class OrchestratorAgentLifecycleTest {
 
     @Test
     void executesTheSelectedAgentWithInjectedToolsAndDynamicCodeMapContext() throws Exception {
-        Files.writeString(tempDir.resolve("CODE_MAP.md"), "# CODE_MAP\n\n### DynamicAgent\n- signature");
+        Files.writeString(tempDir.resolve("AI_CODE_MAP.md"), "# AI_CODE_MAP\n\n### DynamicAgent\n- signature");
         Path srcDir = tempDir.resolve("src/main/java/com/example");
         Files.createDirectories(srcDir);
         Files.writeString(srcDir.resolve("OrchestratedType.java"), """
@@ -55,7 +55,7 @@ class OrchestratorAgentLifecycleTest {
                         "file_system", fileService,
                         "gradle", gradleExecutionService),
                 Map.of(
-                        "code_map", codeMapLoader::loadCodeMap,
+                        "ai_code_map", codeMapLoader::loadCodeMap,
                         "workspace_index", workspaceMapService::loadWorkspaceMap));
         DynamicRoutingStrategy routingStrategy = new DynamicRoutingStrategy(
                 request -> new RoutingDecision(
@@ -63,7 +63,7 @@ class OrchestratorAgentLifecycleTest {
                         ModelTier.TIER3_POWERFUL,
                         "You are a Java developer agent focused on clean refactors.",
                         List.of("file_system", "gradle"),
-                        List.of("code_map", "workspace_index")));
+                        List.of("ai_code_map", "workspace_index")));
         OrchestratorAgent orchestrator = new OrchestratorAgent(routingStrategy, agentFactory);
         TaskRequest request = new TaskRequest(
                 "req-1",

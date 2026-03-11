@@ -55,19 +55,25 @@ public final class FaberCli {
 
     private static final int HTTP_TOO_MANY_REQUESTS = 429;
     private static final String SOURCE_CLI = "cli";
+    private static final String DEFAULT_CONFIG_FILE = "config.yml";
+    private static final String DEFAULT_TASK_FILE = "task.txt";
     private static final String AUDIT_DIRECTORY = "transcripts";
     private static final String AUDIT_FILE_PREFIX = "Faber_";
     private static final String AUDIT_FILE_SUFFIX = "_Transcript.jsonl";
     private static final String TOOL_FILE_SYSTEM = "file_system";
     private static final String TOOL_GRADLE = "gradle";
-    private static final String CONTEXT_CODE_MAP = "code_map";
+    private static final String CONTEXT_AI_CODE_MAP = "ai_code_map";
     private static final String CONTEXT_WORKSPACE_INDEX = "workspace_index";
     private static final String ROUTING_DYNAMIC = "DYNAMIC";
     private static final String ROUTING_RULE_BASED = "RULE_BASED";
     private static final String USAGE = """
             Usage:
-              java -jar faber.jar --config <path-to-faber.yml> --task <path-to-task-file>
+              java -jar faber.jar [--config <path-to-config.yml>] [--task <path-to-task-file>]
               java -jar faber.jar --help
+
+            Defaults:
+              --config config.yml
+              --task task.txt
             """;
 
     private final ConfigLoader configLoader;
@@ -75,9 +81,10 @@ public final class FaberCli {
     private final PrintStream out;
     private final PrintStream err;
     private final Bootstrapper bootstrapper;
+    private final Path workingDirectory;
 
     public FaberCli() {
-        this(new ConfigLoader(), System.getenv(), System.out, System.err, FaberCli::bootstrapRuntime);
+        this(new ConfigLoader(), System.getenv(), System.out, System.err, FaberCli::bootstrapRuntime, Path.of(""));
     }
 
     FaberCli(
@@ -86,11 +93,22 @@ public final class FaberCli {
             @Nonnull PrintStream out,
             @Nonnull PrintStream err,
             @Nonnull Bootstrapper bootstrapper) {
+        this(configLoader, environment, out, err, bootstrapper, Path.of(""));
+    }
+
+    FaberCli(
+            @Nonnull ConfigLoader configLoader,
+            @Nonnull Map<String, String> environment,
+            @Nonnull PrintStream out,
+            @Nonnull PrintStream err,
+            @Nonnull Bootstrapper bootstrapper,
+            @Nonnull Path workingDirectory) {
         this.configLoader = Objects.requireNonNull(configLoader, "configLoader");
         this.environment = Map.copyOf(Objects.requireNonNull(environment, "environment"));
         this.out = Objects.requireNonNull(out, "out");
         this.err = Objects.requireNonNull(err, "err");
         this.bootstrapper = Objects.requireNonNull(bootstrapper, "bootstrapper");
+        this.workingDirectory = Objects.requireNonNull(workingDirectory, "workingDirectory").toAbsolutePath().normalize();
     }
 
     public static void main(String[] args) {
@@ -109,10 +127,11 @@ public final class FaberCli {
             }
 
             // Load the YAML configuration and task text before bootstrapping the runtime.
-            FaberConfig config = configLoader.load(cliArguments.configPath());
-            Path taskPath = cliArguments.taskPath().toAbsolutePath().normalize();
+            Path configPath = resolveCliPath(cliArguments.configPath());
+            FaberConfig config = configLoader.load(configPath);
+            Path taskPath = resolveCliPath(cliArguments.taskPath());
             String taskContents = Files.readString(taskPath, StandardCharsets.UTF_8);
-            Path configDirectory = resolveConfigDirectory(cliArguments.configPath());
+            Path configDirectory = resolveConfigDirectory(configPath);
 
             // Build the orchestrator runtime from config and execute the requested task.
             OrchestratorAgent orchestrator = bootstrapper.bootstrap(config, environment, configDirectory);
@@ -301,7 +320,7 @@ public final class FaberCli {
         WorkspaceCodeMapLoader codeMapLoader = new WorkspaceCodeMapLoader(nonNullWorkspaceRoot);
         WorkspaceMapService workspaceMapService = new WorkspaceMapService(nonNullWorkspaceRoot);
         return Map.of(
-                CONTEXT_CODE_MAP, codeMapLoader::loadCodeMap,
+                CONTEXT_AI_CODE_MAP, codeMapLoader::loadCodeMap,
                 CONTEXT_WORKSPACE_INDEX, workspaceMapService::loadWorkspaceMap);
     }
 
@@ -331,13 +350,22 @@ public final class FaberCli {
     }
 
     @Nonnull
+    private Path resolveCliPath(@Nonnull Path path) {
+        Path nonNullPath = Objects.requireNonNull(path, "path");
+        if (nonNullPath.isAbsolute()) {
+            return nonNullPath.normalize();
+        }
+        return workingDirectory.resolve(nonNullPath).normalize();
+    }
+
+    @Nonnull
     private static CliArguments parseArguments(@Nonnull String[] args) {
         if (args.length == 1 && "--help".equals(args[0])) {
             return new CliArguments(null, null, true);
         }
 
-        Path configPath = null;
-        Path taskPath = null;
+        Path configPath = Path.of(DEFAULT_CONFIG_FILE);
+        Path taskPath = Path.of(DEFAULT_TASK_FILE);
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             switch (arg) {
@@ -348,9 +376,6 @@ public final class FaberCli {
                 }
                 default -> throw new IllegalArgumentException("Unknown argument: " + arg);
             }
-        }
-        if (configPath == null || taskPath == null) {
-            throw new IllegalArgumentException("Both --config and --task are required");
         }
         return new CliArguments(configPath, taskPath, false);
     }

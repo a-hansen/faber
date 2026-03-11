@@ -30,7 +30,7 @@ class DynamicAgentTest {
                 "You are a Java developer agent focused on precise refactors.",
                 executionEngine,
                 List.of("tool-a", "tool-b"),
-                "Current codebase architecture:\n# CODE_MAP\n\nCurrent workspace map:\npkg com.example");
+                "Current codebase architecture:\n# AI_CODE_MAP\n\nCurrent workspace map:\npkg com.example");
         TaskRequest request = new TaskRequest(
                 "req-1",
                 "Refactor this service.",

@@ -1,5 +1,11 @@
 # CODE_MAP
 
+## Package `com.comfortanalytics.faber`
+
+### `Main`
+Thin top-level launcher that delegates the executable entry point to `com.comfortanalytics.faber.cli.FaberCli`.
+- `public static void main(String[] args)`
+
 ## Package `com.comfortanalytics.faber.annotation`
 
 ### `Nonnull`
@@ -60,7 +66,7 @@ YAML-backed loader that reads a `faber.yml` file into the immutable CLI configur
 - `public FaberConfig load(Path configPath)`
 
 ### `FaberCli`
-CLI/bootstrap entry point that parses `--config` and `--task`, wires models/tools/contexts, attaches audit listeners, and executes the orchestrator.
+CLI/bootstrap implementation that parses `--config` and `--task`, wires models/tools/contexts, attaches audit listeners, and executes the orchestrator.
 - `public static void main(String[] args)`
 
 ## Package `com.comfortanalytics.faber.cli.config`

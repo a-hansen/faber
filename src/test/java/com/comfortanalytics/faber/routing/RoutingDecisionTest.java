@@ -22,7 +22,7 @@ class RoutingDecisionTest {
     @Test
     void exposesAllConfiguredFieldsAndDefensivelyCopiesLists() {
         List<String> requiredTools = new ArrayList<>(List.of("file_system", "gradle"));
-        List<String> requiredContexts = new ArrayList<>(List.of("code_map", "workspace_index"));
+        List<String> requiredContexts = new ArrayList<>(List.of("ai_code_map", "workspace_index"));
         RoutingDecision decision = new RoutingDecision(
                 AgentRole.FINANCIAL_ANALYST,
                 ModelTier.TIER3_POWERFUL,
@@ -37,6 +37,6 @@ class RoutingDecisionTest {
         assertEquals(ModelTier.TIER3_POWERFUL, decision.modelTier());
         assertEquals("Review the portfolio for risk.", decision.persona());
         assertEquals(List.of("file_system", "gradle"), decision.requiredTools());
-        assertEquals(List.of("code_map", "workspace_index"), decision.requiredContexts());
+        assertEquals(List.of("ai_code_map", "workspace_index"), decision.requiredContexts());
     }
 }

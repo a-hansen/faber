@@ -13,9 +13,9 @@ public final class WorkspaceCodeMapLoader {
 
     public WorkspaceCodeMapLoader(@Nonnull Path workspaceRoot) {
         Path rootPath = Objects.requireNonNull(workspaceRoot, "workspaceRoot").toAbsolutePath().normalize();
-        this.codeMapPath = rootPath.resolve("CODE_MAP.md").normalize();
+        this.codeMapPath = rootPath.resolve("AI_CODE_MAP.md").normalize();
         if (!codeMapPath.startsWith(rootPath)) {
-            throw new SecurityException("CODE_MAP.md path escaped the workspace root");
+            throw new SecurityException("AI_CODE_MAP.md path escaped the workspace root");
         }
     }
 
@@ -23,11 +23,11 @@ public final class WorkspaceCodeMapLoader {
     public String loadCodeMap() {
         try {
             if (!Files.exists(codeMapPath)) {
-                throw new IllegalStateException("CODE_MAP.md not found at: " + codeMapPath);
+                throw new IllegalStateException("AI_CODE_MAP.md not found at: " + codeMapPath);
             }
             return Files.readString(codeMapPath, StandardCharsets.UTF_8);
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to read CODE_MAP.md from: " + codeMapPath, e);
+            throw new IllegalStateException("Failed to read AI_CODE_MAP.md from: " + codeMapPath, e);
         }
     }
 }

@@ -1,8 +1,6 @@
 package com.comfortanalytics.faber.cli;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import com.comfortanalytics.faber.agents.DynamicAgent;
 import com.comfortanalytics.faber.cli.config.FaberConfig;
 import com.comfortanalytics.faber.cli.config.ModelsConfig;
@@ -27,12 +25,9 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
 class FaberCliTest {
-
     @TempDir
     Path tempDir;
-
     @Test
     void printsUsageWhenHelpIsRequested() {
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
@@ -45,14 +40,93 @@ class FaberCliTest {
                 (config, environment, configDirectory) -> {
                     throw new AssertionError("bootstrapper should not be called for --help");
                 });
-
         int exitCode = cli.run(new String[] {"--help"});
-
         assertEquals(0, exitCode);
         assertTrue(stdout.toString().contains("Usage:"));
         assertEquals("", stderr.toString());
     }
-
+    @Test
+    void usesDefaultConfigAndTaskPathsWhenArgumentsAreOmitted() throws Exception {
+        Path configPath = tempDir.resolve("config.yml");
+        Files.writeString(configPath, """
+                workspace:
+                  rootPath: .
+                routing:
+                  mode: rule_based
+                models:
+                  tier1:
+                    primary:
+                      provider: gemini
+                      model: gemini-2.0-flash
+                  tier2:
+                    primary:
+                      provider: openai
+                      model: gpt-4.1-mini
+                """);
+        Files.writeString(tempDir.resolve("task.txt"), "Use the defaults.");
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        FaberCli cli = new FaberCli(
+                new ConfigLoader(),
+                Map.of(),
+                new PrintStream(stdout),
+                new PrintStream(stderr),
+                (config, environment, configDirectory) -> new OrchestratorAgent(
+                        new RuleBasedRoutingStrategy(),
+                        decision -> new DynamicAgent(
+                                decision.role(),
+                                decision.modelTier(),
+                                decision.persona(),
+                                request -> "default-response",
+                                List.of(),
+                                "")),
+                tempDir);
+        int exitCode = cli.run(new String[0]);
+        assertEquals(0, exitCode);
+        assertEquals("default-response" + System.lineSeparator(), stdout.toString());
+        assertEquals("", stderr.toString());
+    }
+    @Test
+    void usesTheDefaultTaskPathWhenOnlyConfigIsProvided() throws Exception {
+        Path configPath = tempDir.resolve("custom-config.yml");
+        Files.writeString(configPath, """
+                workspace:
+                  rootPath: .
+                routing:
+                  mode: rule_based
+                models:
+                  tier1:
+                    primary:
+                      provider: gemini
+                      model: gemini-2.0-flash
+                  tier2:
+                    primary:
+                      provider: openai
+                      model: gpt-4.1-mini
+                """);
+        Files.writeString(tempDir.resolve("task.txt"), "Default task path still applies.");
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        FaberCli cli = new FaberCli(
+                new ConfigLoader(),
+                Map.of(),
+                new PrintStream(stdout),
+                new PrintStream(stderr),
+                (config, environment, configDirectory) -> new OrchestratorAgent(
+                        new RuleBasedRoutingStrategy(),
+                        decision -> new DynamicAgent(
+                                decision.role(),
+                                decision.modelTier(),
+                                decision.persona(),
+                                request -> "mixed-response",
+                                List.of(),
+                                "")),
+                tempDir);
+        int exitCode = cli.run(new String[] {"--config", configPath.getFileName().toString()});
+        assertEquals(0, exitCode);
+        assertEquals("mixed-response" + System.lineSeparator(), stdout.toString());
+        assertEquals("", stderr.toString());
+    }
     @Test
     void readsTheTaskFileAndPrintsTheAgentResponse() throws Exception {
         Path configPath = tempDir.resolve("faber.yml");
@@ -89,24 +163,19 @@ class FaberCliTest {
                                 request -> "cli-response",
                                 List.of(),
                                 "")));
-
         int exitCode = cli.run(new String[] {"--config", configPath.toString(), "--task", taskPath.toString()});
-
         assertEquals(0, exitCode);
         assertEquals("cli-response" + System.lineSeparator(), stdout.toString());
         assertEquals("", stderr.toString());
     }
-
     @Test
     void bootstrapsTheRealRuleBasedRuntimeWithFakeChatModels() throws Exception {
-        Files.writeString(tempDir.resolve("CODE_MAP.md"), "# CODE_MAP\n\n### DynamicAgent\n- signature");
+        Files.writeString(tempDir.resolve("AI_CODE_MAP.md"), "# AI_CODE_MAP\n\n### DynamicAgent\n- signature");
         Path srcDir = tempDir.resolve("src/main/java/com/example");
         Files.createDirectories(srcDir);
         Files.writeString(srcDir.resolve("BootstrappedType.java"), """
                 package com.example;
-
                 public final class BootstrappedType {
-
                     public String value() {
                         return "ok";
                     }
@@ -118,7 +187,6 @@ class FaberCliTest {
                 new ModelsConfig(
                         Map.of("router", new ProviderConfig("gemini", "gemini-2.0-flash")),
                         Map.of("executor", new ProviderConfig("openai", "gpt-4.1-mini"))));
-
         OrchestratorAgent orchestrator = FaberCli.bootstrapRuntime(
                 config,
                 Map.of(),
@@ -129,28 +197,22 @@ class FaberCliTest {
                 "Write a Java method to parse JSON.",
                 Map.of("source", "test"),
                 Instant.parse("2026-03-08T00:00:00Z"));
-
         String response = orchestrator.execute(request);
         Path transcriptFile = FaberCli.auditTranscriptFile(tempDir, "tier2.executor");
         String transcript = Files.readString(transcriptFile);
-
         assertEquals("boot-response", response);
         assertTrue(Files.exists(transcriptFile));
         assertTrue(transcript.contains("\"agent\":\"tier2.executor\""));
         assertTrue(transcript.contains("boot-response"));
         assertTrue(transcript.contains("Write a Java method to parse JSON."));
     }
-
     private static final class StaticChatModel implements ChatModel {
-
         private final String response;
         private final List<ChatModelListener> listeners;
-
         private StaticChatModel(String response, List<ChatModelListener> listeners) {
             this.response = response;
             this.listeners = List.copyOf(listeners);
         }
-
         @Override
         public ChatResponse doChat(ChatRequest request) {
             ChatResponse responseContext = ChatResponse.builder()

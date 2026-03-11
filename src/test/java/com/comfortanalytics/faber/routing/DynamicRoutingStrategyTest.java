@@ -41,7 +41,7 @@ class DynamicRoutingStrategyTest {
         assertEquals(AgentRole.JAVA_DEVELOPER, decision.role());
         assertEquals(ModelTier.TIER2_BALANCED, decision.modelTier());
         assertEquals(List.of("file_system", "gradle"), decision.requiredTools());
-        assertEquals(List.of("code_map", "workspace_index"), decision.requiredContexts());
+        assertEquals(List.of("ai_code_map", "workspace_index"), decision.requiredContexts());
     }
 
     @Test
@@ -52,7 +52,7 @@ class DynamicRoutingStrategyTest {
                         ModelTier.TIER1_FAST,
                         "Write Java code carefully.",
                         List.of("file_system"),
-                        List.of("code_map")));
+                        List.of("ai_code_map")));
 
         assertThrows(NullPointerException.class, () -> strategy.route(null));
         assertThrows(NullPointerException.class, () -> strategy.routeDecision(null));

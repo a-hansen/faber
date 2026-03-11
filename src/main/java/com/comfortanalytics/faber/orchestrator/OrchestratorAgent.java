@@ -69,7 +69,7 @@ public final class OrchestratorAgent {
                     DEFAULT_MODEL_TIER,
                     JAVA_DEVELOPER_PERSONA,
                     List.of("file_system", "gradle"),
-                    List.of("code_map", "workspace_index"));
+                    List.of("ai_code_map", "workspace_index"));
             case FINANCIAL_ANALYST -> new RoutingDecision(
                     AgentRole.FINANCIAL_ANALYST,
                     DEFAULT_MODEL_TIER,

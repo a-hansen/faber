@@ -1,14 +1,3 @@
-Act as an expert Java AI engineer. Please read the following system requirements and generate a
-comprehensive, step-by-step Markdown execution plan for building Project Faber. Here are the
-requirements:
-
-Here is the finalized, battle-tested "Mega-Prompt" for Project Faber. I have woven in every single
-constraint, fix, and edge-case we discovered during the dry runs.
-
-You can copy and paste this entire block directly into your `SYSTEM_PROMPT.md` file.
-
----
-
 **System Context:**
 I am building a multi-agent system in Java called "Project Faber" using the LangChain4J framework.
 The project is already initialized with Gradle and JUnit. Please generate the necessary Java
@@ -90,10 +79,10 @@ on clean code, interface-driven design, and separation of concerns.
 
 **8. Developer Workflow & State Management**
 
-* I will be maintaining a `PROJECT_STATE.md` file in the root directory to track our progress across
+* I will be maintaining a `AI_STATE.md` file in the root directory to track our progress across
   multiple chat sessions.
 * Whenever I ask you to "save state" or "wrap up," you must generate an updated version of
-  `PROJECT_STATE.md` summarizing what we have built, key technical decisions made in this session,
+  `AI_STATE.md` summarizing what we have built, key technical decisions made in this session,
   unresolved issues, and the immediate next steps.
 
 9. Codebase Mapping & Context Preservation

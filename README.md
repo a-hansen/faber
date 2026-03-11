@@ -6,7 +6,7 @@ Today, the repository contains the core building blocks for that flow:
 - dynamic routing through typed `RoutingDecision` objects
 - dynamic agent composition through `DynamicAgent`
 - registry-based tool and context injection in `DefaultAgentFactory`
-- a real CLI/bootstrap entry point in `com.comfortanalytics.faber.cli.FaberCli`
+- a real CLI/bootstrap implementation in `com.comfortanalytics.faber.cli.FaberCli`
 - YAML-backed configuration loading through `ConfigLoader`
 - sandboxed file and Gradle tools
 - persistent memory and summarization seams
@@ -15,25 +15,27 @@ Today, the repository contains the core building blocks for that flow:
 ## Current repository status
 
 The current checkout now supports the documented CLI/bootstrap contract:
-- `com.comfortanalytics.faber.cli.FaberCli` is the real executable entry point
-- `faber.yml` is loaded through Jackson YAML parsing
-- `--config <path>` and `--task <path>` are supported
+- `com.comfortanalytics.faber.Main` is the executable jar entry point
+- `com.comfortanalytics.faber.cli.FaberCli` contains the CLI/bootstrap implementation
+- `config.yml` and `task.txt` are used by default when `--config` and `--task` are omitted
+- `--config <path>` and `--task <path>` can still override those defaults
 - the CLI builds an `OrchestratorAgent` and executes `OrchestratorAgent.execute(TaskRequest)`
 
 Important current limitations:
 - provider API keys are still read from `System.getenv()` rather than from a built-in `.env` loader
 - the current model configuration shape covers `tier1` and `tier2`; `tier3` falls back to the configured tier-2 execution models
 
-## 3. Configuration (`faber.yml`)
+## 3. Configuration (`config.yml`)
 
 ### Implemented configuration contract
 
-The Faber runtime is configured through a YAML file such as `faber.yml`. The current CLI reads:
+The Faber runtime is configured through a YAML file such as `config.yml`. The current CLI reads:
 - the sandbox workspace root
 - the routing mode
 - the tier-1 and tier-2 provider/model mappings
+- by default, `config.yml` from the current working directory unless `--config` is provided
 
-Example `faber.yml`:
+Example `config.yml`:
 
 ```yaml
 workspace:
@@ -62,9 +64,9 @@ Supported provider kinds in the current CLI bootstrap are:
 ### What is implemented today
 
 This part is now implemented in the repository:
-- `ConfigLoader` parses `faber.yml` into immutable config records under `com.comfortanalytics.faber.cli.config`
-- `FaberCli` reads the config file passed through `--config`
-- relative `workspace.rootPath` values are resolved relative to the directory containing `faber.yml`
+- `ConfigLoader` parses `config.yml` (or the file passed through `--config`) into immutable config records under `com.comfortanalytics.faber.cli.config`
+- `FaberCli` reads `task.txt` by default, or the file passed through `--task`
+- relative `workspace.rootPath` values are resolved relative to the directory containing `config.yml`
 - provider API keys are resolved from environment variables such as:
   - `OPENAI_API_KEY`
   - `GEMINI_API_KEY`
@@ -75,7 +77,7 @@ This part is now implemented in the repository:
 
 ### Implemented task-file workflow
 
-The CLI reads a task file, usually `.txt` or `.md`, from the path passed through `--task`.
+The CLI reads `task.txt` from the current working directory by default, or another task file from the path passed through `--task`.
 
 That file should contain:
 - the goal
@@ -134,22 +136,24 @@ What exists today:
 
 ### Supported CLI contract
 
-The compiled Faber executable supports this command:
+The compiled Faber executable supports these commands:
 
 ```bash
-java -jar faber.jar --config faber.yml --task my_task.md
+java -jar faber.jar
+java -jar faber.jar --config config.yml --task my_task.md
 ```
 
 With the checked-in jar name in this repository, that is typically:
 
 ```powershell
 & '.\gradlew.bat' jar
-& "$env:JAVA_HOME\bin\java.exe" -jar '.\build\libs\faber-1.0-SNAPSHOT.jar' --config '.\faber.yml' --task '.\my_task.md'
+& "$env:JAVA_HOME\bin\java.exe" -jar '.\build\libs\faber-1.0-SNAPSHOT.jar'
+& "$env:JAVA_HOME\bin\java.exe" -jar '.\build\libs\faber-1.0-SNAPSHOT.jar' --config '.\config.yml' --task '.\my_task.md'
 ```
 
 When that command runs, the system:
 1. starts the Faber runtime
-2. parses `faber.yml`
+2. parses `config.yml`
 3. resolves provider credentials from environment variables
 4. reads the task file
 5. creates a `TaskRequest`
@@ -208,16 +212,17 @@ These files matter to the implemented CLI/runtime.
 ## Recommended usage today
 
 If you are working with the repository exactly as checked in right now:
-- run `FaberCli` through the built jar for normal CLI usage
-- keep provider API keys in environment variables, not in `faber.yml`
+- place `config.yml` and `task.txt` in the working directory when you want zero-argument CLI execution
+- use `--config` and `--task` only when you need to override those defaults
+- keep provider API keys in environment variables, not in `config.yml`
 - keep `CODE_MAP.md` present when you want developer-focused context injection
 - keep your target source under `src/main/java` when you want workspace indexing
 - use the programmatic Java wiring path only when you need custom bootstrap behavior beyond the shipped CLI
 
 ## Short version
 
-- Project Faber now includes a real CLI/bootstrap entry point in `FaberCli`.
-- `faber.yml` loading and `--config/--task` parsing are implemented.
+- Project Faber now includes a top-level executable entry point in `Main` and a CLI/bootstrap implementation in `FaberCli`.
+- `config.yml` and `task.txt` are the default CLI inputs, with `--config` and `--task` available as overrides.
 - The built jar is executable through `java -jar`.
 - Dynamic routing, dynamic agent composition, sandboxed tools, memory, audit seams, and workspace indexing are all present.
 - The main remaining gaps are polish items such as a built-in `.env` loader and configurable audit/bootstrap options.
